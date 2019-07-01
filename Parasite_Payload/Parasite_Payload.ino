@@ -22,7 +22,7 @@
 
 
 
-//SD ardunio shield pin definition
+//SD shield pin definition (Arduino shield is pin 4, Sparkfun shield is pin 8, Adafruit shield is pin 10)
 #define chipSelect 8
 
 //SD file logging
