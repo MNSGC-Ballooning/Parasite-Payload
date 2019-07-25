@@ -2,6 +2,8 @@
 #include <Adafruit_MAX31856.h>  //thermocouple library
 #include <XBee.h>  //xbee library
 #include <SD.h>  //SD card library
+#include <LatchRelay.h> //Latching relay library
+#include <UbloxGPS.h> //GPS library
 
 /*
   /-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\-/-\
@@ -25,10 +27,50 @@
 //SD shield pin definition (Arduino shield is pin 4, Sparkfun shield is pin 8, Adafruit shield is pin 10)
 #define chipSelect 8
 
+//APRS Macros
+#define APRS_ON 22
+#define APRS_OFF 23
+#define APRS_TIMER 14400000
+#define LOG_TIMER 7000
+
+//GPS Macros
+#define UBLOX_SERIAL Serial1
+
+//Plantower
+#define PLAN_SERIAL Serial2
+//Plantower Definitions
+  String dataLog = "";                                  //Used for data logging
+  int nhits=1;                                          //Used to count successful data transmissions    
+  int ntot=1;                                           //Used to count total attempted transmissions
+  bool goodLog = false;                                 //Used to check if data is actually being logged
+  int badLog = 0;                                       //Counts the number of failed log attempts
+  //String filename = "ptLog.csv";                      //File name that data wil be written to
+  //File ptLog;                                         //File that data is written to 
+                  
+  struct pms5003data {
+    uint16_t framelen;
+    uint16_t pm10_standard, pm25_standard, pm100_standard;
+    uint16_t pm10_env, pm25_env, pm100_env;
+    uint16_t particles_03um, particles_05um, particles_10um;
+    uint16_t particles_25um, particles_50um, particles_100um;
+    uint16_t unused;
+    uint16_t checksum;
+  } planData;                                           //This struct will organize the plantower bins into usable data
+
 //SD file logging
 File datalog;                     //File object for datalogging
 char filename[] = "Paras00.csv";   //Template for file name to save data
 bool SDactive = false;            //Used to check for SD card before attempting to log data
+
+//GPS
+UbloxGPS GPS(&UBLOX_SERIAL);
+//boolean fixU = false;
+float alt_GPS = 0;               // altitude calculated by the GPS in feet
+float Control_Altitude = 0;
+float prev_Control_Altitude = 0;
+unsigned long prev_time = 0;
+float ascent_rate = 0;
+
 
 
 //Thermocouple object
@@ -44,11 +86,17 @@ float atm = 0;
 
 unsigned long time;     //Used to keep time running
 
+LatchRelay APRS(APRS_ON, APRS_OFF);   //APRS relay object
+unsigned long loopTime = 0;           //Loop timer
 
 
 void setup() {
 
   Serial.begin(9600);
+  initGPS();
+
+  //Relay Setup
+  APRS.init(0);                                              //APRS Relay initialized and turned off
 
   //Setup Adafruit MAX_31856 Thermocouples #1-4
   maxthermo1.begin();
@@ -74,12 +122,18 @@ void setup() {
     }
     if (!SDactive) Serial.println("No available file names; clear SD card to enable logging");
   }
-  String header = "Pressure   Temp 1    Time";
+  String header = "Pressure, Temp 1, Time, Lat, Long, Alt, Date, Real Time, Satellites, hits, millis, 3, 5, 10, 25, 50, 100";
   Serial.println(header);
   if (SDactive) {
     datalog.println(header);
     datalog.close();
   }
+
+//Plantower Setup
+Serial2.begin(9600);
+while (!Serial2) ;
+
+
   
 }
 
@@ -87,6 +141,8 @@ void setup() {
 
 void loop() {
 
+if (millis()-loopTime >= LOG_TIMER){
+  loopTime = millis();
   //Pressure Sensor
   pressureSensor = analogRead(A0);                       //Read the analog pin
   pressureSensorV = pressureSensor * (5.0 / 1024);        //Convert the digital number to voltage
@@ -124,13 +180,17 @@ void loop() {
   time = millis() / 1000;                                 //Converts time to seconds and starts the time at zero by subtracting the intial 26 seconds.
 
   String data = String(atmSTR + "      " + T1intSTR + "    " + time);
+  data += ',' + updateGPS() + ',' + dataLog;
   Serial.println(data);
   if (SDactive) {
     datalog = SD.open(filename, FILE_WRITE);
     datalog.println(data);                                //Takes serial monitor data and adds to SD card
     datalog.close();                                      //Close file afterward to ensure data is saved properly
-  }
-  
-  delay(1000);
+  } 
+
+  if ((millis() >= APRS_TIMER)||(ascent_rate<-20)) APRS.setState(1);
+}
+GPS.update();
+readPMSdata(&PLAN_SERIAL);
 
 }
