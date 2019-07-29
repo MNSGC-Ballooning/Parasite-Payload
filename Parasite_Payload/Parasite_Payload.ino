@@ -35,6 +35,7 @@
 
 //GPS Macros
 #define UBLOX_SERIAL Serial1
+#define UBLOX_BAUD 4800 
 
 //Plantower
 #define PLAN_SERIAL Serial2
