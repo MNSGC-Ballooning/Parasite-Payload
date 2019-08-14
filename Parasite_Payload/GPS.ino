@@ -13,26 +13,27 @@ void initGPS(){
   Serial.println("GPS configured");
 }
 
-String updateGPS(){
-  alt_GPS = GPS.getAlt_feet();  
-  String data = "";
-  data = String(GPS.getLat(), 4) + "," + String(GPS.getLon(), 4) + "," 
-  + String(alt_GPS, 1) + ","
+void updateGPS(){
+  Control_Altitude = GPS.getAlt_feet();
+  ascent_rate = ((Control_Altitude - prev_Control_Altitude)/(millis() - prev_time))*1000;
+  prev_time = millis(); 
+  prev_Control_Altitude = Control_Altitude; 
+  GPSdata = String(GPS.getLat(), 4) + "," + String(GPS.getLon(), 4) + "," 
+  + String(Control_Altitude, 1) + ","
   + String(GPS.getMonth()) + "/" + String(GPS.getDay()) + "/" + String(GPS.getYear()) + ","
   + String(GPS.getHour()) + ":" + String(GPS.getMinute()) + ":" + String(GPS.getSecond()) + ","
   + String(GPS.getSats()) + ",";
   
   //GPS should update once per second, if data is more than 2 seconds old, fix was likely lost
   if(GPS.getFixAge() > 4000){
-    data += "No Fix,";
+    GPSdata += "No Fix,";
     //fixU == false;
   }
   else{
-    data += "Fix,";
+    GPSdata += "Fix,";
     //fixU == true;
   }
 
-  return data;
 }
 
 void ascentRateUpdate(){

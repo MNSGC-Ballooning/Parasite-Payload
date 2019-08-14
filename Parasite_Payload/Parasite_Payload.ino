@@ -58,7 +58,7 @@
     uint16_t checksum;
   } planData;                                           //This struct will organize the plantower bins into usable data
 
-//SD file logging
+//SD file logging 
 File datalog;                     //File object for datalogging
 char filename[] = "Paras00.csv";   //Template for file name to save data
 bool SDactive = false;            //Used to check for SD card before attempting to log data
@@ -71,6 +71,8 @@ float Control_Altitude = 0;
 float prev_Control_Altitude = 0;
 unsigned long prev_time = 0;
 float ascent_rate = 0;
+String GPSdata = "";
+static byte Descent_Counter = 0;
 
 
 
@@ -144,6 +146,7 @@ void loop() {
 
 if (millis()-loopTime >= LOG_TIMER){
   loopTime = millis();
+  updateGPS();
   //Pressure Sensor
   pressureSensor = analogRead(A0);                       //Read the analog pin
   pressureSensorV = pressureSensor * (5.0 / 1024);        //Convert the digital number to voltage
@@ -180,8 +183,8 @@ if (millis()-loopTime >= LOG_TIMER){
   
   time = millis() / 1000;                                 //Converts time to seconds and starts the time at zero by subtracting the intial 26 seconds.
 
-  String data = String(atmSTR + "      " + T1intSTR + "    " + time);
-  data += ',' + updateGPS() + ',' + dataLog;
+  String data = String(atmSTR + "," + T1intSTR + "," + time);
+  data += ',' + GPSdata + ',' + dataLog;
   Serial.println(data);
   if (SDactive) {
     datalog = SD.open(filename, FILE_WRITE);
@@ -189,7 +192,19 @@ if (millis()-loopTime >= LOG_TIMER){
     datalog.close();                                      //Close file afterward to ensure data is saved properly
   } 
 
-  if ((millis() >= APRS_TIMER)||(ascent_rate<-20)) APRS.setState(1);
+  if (millis() >= APRS_TIMER) {
+    APRS.setState(1);
+  }
+  else if (ascent_rate < -16.66) {
+    Descent_Counter++;
+    if (Descent_Counter >= 5) {
+      APRS.setState(1);
+      Descent_Counter = 0;
+    }
+  }
+  else {
+    Descent_Counter = 0;
+  }
 }
 GPS.update();
 readPMSdata(&PLAN_SERIAL);
